@@ -34,6 +34,8 @@ Example:
 import os
 import logging
 import math
+import base64
+from datetime import datetime
 
 import numpy as np
 
@@ -1424,7 +1426,7 @@ _METRIC_DESCRIPTIONS = {
         'FWHM is to a Gaussian. Kappa &lt; 0 means the PSF is more peaked '
         'relative to the Gaussian model. Kappa &gt; 0 means the PSF is '
         'flatter relative to the Gaussian model. '
-        'See Koch+2018 Eq.&nbsp;7.'
+        'See Koch+2018 Eq. 7.'
     ),
     'epsilon': (
         'Epsilon',
@@ -1478,8 +1480,6 @@ def make_html_report(
     str or None
         Path to the written HTML file.
     """
-    import base64
-    from datetime import datetime
 
     if plot_files is None:
         plot_files = {}
