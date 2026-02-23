@@ -234,36 +234,6 @@ if casa_enabled:
             fname_dict['sumwt'] = imagename + '.sumwt'
             return fname_dict
 
-        #####################
-        # _get_center_channel #
-        #####################
-
-        def _get_center_channel(
-            self,
-            vis_file,
-        ):
-            """
-            Get the center channel number from a measurement set.
-
-            Parameters
-            ----------
-            vis_file : str
-                Path to the measurement set.
-
-            Returns
-            -------
-            int
-                Center channel number.
-            """
-            mytb = au.createCasaTool(casaStuff.tbtool)
-            mytb.open(vis_file + '/SPECTRAL_WINDOW')
-            n_chan = mytb.getcol('NUM_CHAN')[0]
-            mytb.close()
-
-            center_chan = n_chan // 2
-            logger.info(f"Visibility has {n_chan} channels, using center channel {center_chan}")
-            return int(center_chan)
-
         ########################
         # _get_beam_properties #
         ########################
