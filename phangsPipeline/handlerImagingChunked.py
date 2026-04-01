@@ -328,6 +328,7 @@ if casa_enabled:
                 do_export_to_fits=True,
                 do_cleanup=True,
                 convergence_fracflux=0.01,
+                convergence_noise_z_threshold=None,
                 singlescale_threshold_value=1.0,
                 extra_ext_in=None,
                 suffix_in=None,
@@ -401,6 +402,7 @@ if casa_enabled:
                     do_export_to_fits=do_export_to_fits,
                     do_cleanup=do_cleanup,
                     convergence_fracflux=convergence_fracflux,
+                    convergence_noise_z_threshold=convergence_noise_z_threshold,
                     singlescale_threshold_value=singlescale_threshold_value,
                     dynamic_sizing=dynamic_sizing,
                     force_square=force_square,
@@ -1133,6 +1135,7 @@ if casa_enabled:
                 self,
                 chunk_num=None,
                 convergence_fracflux=0.01,
+                convergence_noise_z_threshold=None,
                 backup=True,
                 gather_chunks_into_cube=False,
                 remove_chunks=False,
@@ -1221,6 +1224,7 @@ if casa_enabled:
                             stop_at_negative=True,
                             remask_each_loop=False,
                             force_dirty_image=False,
+                            convergence_noise_z_threshold=convergence_noise_z_threshold,
                             )
 
                 if backup:
@@ -1349,6 +1353,7 @@ if casa_enabled:
                 self,
                 chunk_num=None,
                 convergence_fracflux=0.01,
+                convergence_noise_z_threshold=None,
                 gather_chunks_into_cube=False,
                 remove_chunks=False,
                 threshold_value=1.0,
@@ -1450,6 +1455,7 @@ if casa_enabled:
                         stop_at_negative=False,
                         remask_each_loop=False,
                         force_dirty_image=False,
+                        convergence_noise_z_threshold=convergence_noise_z_threshold,
                     )
 
                 if backup:
@@ -1587,6 +1593,7 @@ if casa_enabled:
                 do_export_to_fits=True,
                 do_cleanup=True,
                 convergence_fracflux=0.01,
+                convergence_noise_z_threshold=None,
                 singlescale_threshold_value=1.0,
                 dynamic_sizing=True,
                 force_square=False,
@@ -1651,6 +1658,7 @@ if casa_enabled:
                 if do_multiscale_clean:
                     self.task_multiscale_clean(chunk_num=chunk_to_iter,
                                                convergence_fracflux=convergence_fracflux,
+                                               convergence_noise_z_threshold=convergence_noise_z_threshold,
                                                gather_chunks_into_cube=False,
                                                )
 
@@ -1670,6 +1678,7 @@ if casa_enabled:
                 if do_singlescale_clean:
                     self.task_singlescale_clean(chunk_num=chunk_to_iter,
                                                 convergence_fracflux=convergence_fracflux,
+                                                convergence_noise_z_threshold=convergence_noise_z_threshold,
                                                 threshold_value=singlescale_threshold_value,
                                                 skip_singlescale_if_mask_empty=skip_singlescale_if_mask_empty,
                                                 gather_chunks_into_cube=False)

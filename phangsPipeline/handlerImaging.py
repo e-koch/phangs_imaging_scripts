@@ -810,6 +810,7 @@ if casa_enabled:
                 clean_call=None,
                 imaging_method='tclean',
                 convergence_fracflux=0.01,
+                convergence_noise_z_threshold=None,
                 backup=True,
         ):
             """
@@ -863,6 +864,7 @@ if casa_enabled:
                            stop_at_negative=True,
                            remask_each_loop=False,
                            force_dirty_image=False,
+                           convergence_noise_z_threshold=convergence_noise_z_threshold,
                            )
             # log_ext='multiscale',
             if backup:
@@ -981,6 +983,7 @@ if casa_enabled:
                 imaging_method='tclean',
                 convergence_fracflux=0.01,
                 threshold_value=1.0,
+                convergence_noise_z_threshold=None,
                 backup=True,
         ):
             """
@@ -1034,6 +1037,7 @@ if casa_enabled:
                            stop_at_negative=False,
                            remask_each_loop=False,
                            force_dirty_image=False,
+                           convergence_noise_z_threshold=convergence_noise_z_threshold,
                            )
             # log_ext='singlescale',
             if backup:
@@ -1099,6 +1103,7 @@ if casa_enabled:
                 do_revert_to_singlescale=True,
                 do_export_to_fits=True,
                 convergence_fracflux=0.01,
+                convergence_noise_z_threshold=None,
                 singlescale_threshold_value=1.0,
                 dynamic_sizing=True,
                 force_square=False,
@@ -1287,6 +1292,7 @@ if casa_enabled:
                 self.task_multiscale_clean(clean_call=clean_call,
                                            imaging_method=imaging_method,
                                            convergence_fracflux=convergence_fracflux,
+                                           convergence_noise_z_threshold=convergence_noise_z_threshold,
                                            )
 
             if do_export_to_fits and export_multiscale:
@@ -1331,6 +1337,7 @@ if casa_enabled:
                 self.task_singlescale_clean(clean_call=clean_call,
                                             imaging_method=imaging_method,
                                             convergence_fracflux=convergence_fracflux,
+                                            convergence_noise_z_threshold=convergence_noise_z_threshold,
                                             threshold_value=singlescale_threshold_value,
                                             )
 

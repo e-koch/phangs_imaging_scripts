@@ -408,18 +408,93 @@ def execute_clean_call(
 
     if imaging_method == 'tclean':
         # os.mkdir(clean_call.get_param('imagename')+'.image'+'.touch') #<TODO><DEBUG><DL>#
-        casaStuff.tclean(**active_kwargs)
+        active_kwargs['fullsummary'] = True
+        tclean_result = casaStuff.tclean(**active_kwargs)
         # os.rmdir(clean_call.get_param('imagename')+'.image'+'.touch') #<TODO><DEBUG><DL>#
     elif imaging_method == 'sdintimaging':
         casaStuff.sdintimaging(**active_kwargs)
+        tclean_result = None
 
     if clean_call.logfile != None:
         casaStuff.casalog.setlogfile(oldlogfile)
 
-    return
+    return tclean_result
 
 
 # endregion
+
+
+def check_noise_convergence(tclean_summary, noise, gain, last_n_cycles=3, z_threshold=2.0):
+    """
+    Statistical convergence test: are the recent CLEAN components consistent
+    with noise rather than signal?
+
+    Under H0 (noise only), each component has amplitude drawn from
+    N(0, (gain*noise)^2). The sum S of N_total components has
+    Var(S) = N_total * (gain*noise)^2. The conservative bound assumes all
+    components are at scale 0 (A_eff=1), giving an upper bound on the
+    variance that is valid regardless of the multi-scale breakdown.
+
+    Parameters
+    ----------
+    tclean_summary : dict
+        Return value of tclean with fullsummary=True.
+    noise : float
+        RMS noise estimate (Jy/beam), e.g. from noise_for_cube().
+    gain : float
+        CLEAN loop gain (typically 0.1).
+    last_n_cycles : int
+        Number of trailing major cycles from the tclean call to include.
+    z_threshold : float
+        |z| < z_threshold declares components consistent with noise (converged).
+
+    Returns
+    -------
+    dict with keys: z_score, N_components, flux_sum, std_expected, converged
+    None if summary is unavailable or malformed.
+    """
+
+    if tclean_summary is None or not isinstance(tclean_summary, dict):
+        return None
+    if 'summaryminor' not in tclean_summary:
+        return None
+
+    summaryminor = tclean_summary['summaryminor']
+    total_flux_increment = 0.0
+    total_iter_done = 0
+
+    for field in summaryminor:
+        for chan in summaryminor[field]:
+            for pol in summaryminor[field][chan]:
+                data = summaryminor[field][chan][pol]
+                try:
+                    iter_done = np.array(data['iterDone'])
+                    model_flux = np.array(data['modelFlux'])
+                    start_flux = np.array(data['startModelFlux'])
+                except (KeyError, TypeError):
+                    continue
+                n_cycles = len(iter_done)
+                if n_cycles == 0:
+                    continue
+                window = min(last_n_cycles, n_cycles)
+                total_flux_increment += float(
+                    np.sum(model_flux[-window:] - start_flux[-window:]))
+                total_iter_done += int(np.sum(iter_done[-window:]))
+
+    if total_iter_done == 0:
+        return {'z_score': 0.0, 'converged': True,
+                'N_components': 0, 'flux_sum': 0.0, 'std_expected': 0.0}
+
+    std_expected = np.sqrt(total_iter_done) * abs(gain) * float(noise)
+    z_score = total_flux_increment / std_expected if std_expected > 0.0 else 0.0
+
+    return {
+        'z_score': float(z_score),
+        'N_components': total_iter_done,
+        'flux_sum': total_flux_increment,
+        'std_expected': float(std_expected),
+        'converged': abs(z_score) < z_threshold,
+    }
 
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 # Run a clean call with NITER=0 to make a dirty image
@@ -546,6 +621,8 @@ def clean_loop(
         stop_at_negative=True,
         remask_each_loop=False,
         force_dirty_image=False,
+        convergence_noise_z_threshold=None,
+        convergence_noise_window=3,
 ):
     """
     Carry out an iterative clean until a convergence criteria is
@@ -637,7 +714,7 @@ def clean_loop(
     # Create a text record of progress through successive clean calls.
 
     record = []
-    record.append("loopnum, deconvolver, niter, cycleniter, threshold, noise, model_flux, frac_delta_flux\n")
+    record.append("loopnum, deconvolver, niter, cycleniter, threshold, noise, model_flux, frac_delta_flux, noise_z_score\n")
     record.append("# column 1: Loop number.\n")
     record.append("# column 2: Deconvolver used in clean.\n")
     record.append("# column 3: Allocated number of iterations.\n")
@@ -646,6 +723,7 @@ def clean_loop(
     record.append("# column 6: Noise level measured in residuals.\n")
     record.append("# column 7: Integrated model flux.\n")
     record.append("# column 8: Fractional change in flux from previous loop.\n")
+    record.append("# column 9: Noise z-score.\n")
 
     # Initialize the loop counter and our tracking of the flux in the
     # model (which we use to estimate convergence).
@@ -774,9 +852,9 @@ def clean_loop(
 
         # Execute the clean call.
 
-        execute_clean_call(working_call,
-                           imaging_method=imaging_method,
-                           convergence_fracflux=convergence_fracflux)
+        tclean_summary = execute_clean_call(working_call,
+                                            imaging_method=imaging_method,
+                                            convergence_fracflux=convergence_fracflux)
 
         # Calculate the new model flux and the change relative to the
         # previous step, normalized by current flux and by iterations.
@@ -823,6 +901,33 @@ def clean_loop(
             if current_flux < 0.0:
                 proceed = False
 
+        # Statistical noise convergence check: are the recent CLEAN components
+        # consistent with noise draws rather than signal? Uses the conservative
+        # variance bound Var(S) = N*(gain*noise)^2.
+
+        if convergence_noise_z_threshold is not None:
+            noise_conv = check_noise_convergence(
+                tclean_summary=tclean_summary,
+                noise=current_noise,
+                gain=working_call.get_param('gain') or 0.1,
+                last_n_cycles=convergence_noise_window,
+                z_threshold=convergence_noise_z_threshold,
+            )
+            # print(argh)
+            if noise_conv is not None:
+                logger.info(
+                    "Noise convergence: z=%.2f, N=%d, flux_sum=%.4e Jy, "
+                    "std_expected=%.4e Jy, converged=%s" % (
+                        noise_conv['z_score'], noise_conv['N_components'],
+                        noise_conv['flux_sum'], noise_conv['std_expected'],
+                        str(noise_conv['converged'])))
+                if noise_conv['converged']:
+                    proceed = False
+            else:
+                noise_conv = None
+        else:
+            noise_conv = None
+
         # Enforce minimum and maximum limits on number of loops. These
         # override other convergence criteria.
 
@@ -841,7 +946,8 @@ def clean_loop(
         this_record += str(working_call.get_param('threshold')) + ', '
         this_record += str(current_noise) + 'Jy/beam, '
         this_record += str(current_flux) + 'Jy*chan, '
-        this_record += str(frac_delta_flux) + ''
+        this_record += str(frac_delta_flux) + ', '
+        this_record += str(noise_conv['z_score'] if noise_conv is not None else 'N/A')
         this_record += '\n'
 
         # Print the current record to the screen
