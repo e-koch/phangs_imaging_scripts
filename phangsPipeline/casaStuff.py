@@ -204,3 +204,6 @@ if casa_version[0] < 5:
 # sdintimaging import
 if (casa_version[0] >= 6):
     from .taskSDIntImaging import sdintimaging
+    # TODO: switch to casatask version of sdintimaging
+    # from casatasks import sdintimaging
+

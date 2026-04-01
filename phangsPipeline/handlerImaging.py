@@ -190,6 +190,7 @@ if casa_enabled:
                 do_revert_to_singlescale=False,
                 do_export_to_fits=False,
                 convergence_fracflux=0.01,
+                convergence_noise_z_threshold=None,
                 singlescale_threshold_value=1.0,
                 extra_ext_in=None,
                 suffix_in=None,
@@ -207,6 +208,74 @@ if casa_enabled:
             configurations to do the imaging. Toggle the parts of the loop
             using the do_XXX booleans. Other choices affect algorithms
             used.
+
+            The clean convergence is set by the convergence_fracflux and
+            convergence_noise_z_threshold parameters.
+            - convergence_fracflux is the fractional flux threshold between imaging loops.
+                Convergence is reached when the fractional flux change is less than this value.
+            - convergence_noise_z_threshold is the noise threshold in z-scores.
+                Convergence is reached when the z-score test is less than this value. By default,
+                this is disabled by setting to None. We suggest setting this to 2.0 when enabled
+                as a conservative choice.
+
+            Parameters
+            ----------
+            do_all : bool
+                If True, do all steps.
+            imaging_method : str
+                'tclean' or 'sdintimaging'
+            do_dirty_image : bool
+                If True, make a dirty image.
+            do_revert_to_dirty : bool
+                If True, revert to dirty image.
+            do_read_clean_mask : bool
+                If True, read clean mask.
+            do_multiscale_clean : bool
+                If True, multiscale clean.
+            do_revert_to_multiscale : bool
+                If True, revert to multiscale clean.
+            do_singlescale_mask : bool
+                If True, make singlescale mask.
+            singlescale_mask_high_snr : float
+                High SNR threshold for singlescale mask.
+            singlescale_mask_low_snr : float
+                Low SNR threshold for singlescale mask.
+            singlescale_mask_absolute : bool
+                If True, use absolute threshold for singlescale mask.
+            do_singlescale_clean : bool
+                If True, singlescale clean.
+            do_revert_to_singlescale : bool
+                If True, revert to singlescale clean.
+            do_export_to_fits : bool
+                If True, export ms data folders into fits-format image cube files.
+            convergence_fracflux : float
+                Fractional flux convergence threshold for multiscale clean. Default is 0.01.
+            convergence_noise_z_threshold : float
+                Noise convergence threshold for multiscale clean. Default is None. A suggested
+                value to use is 2.0, i.e. the null hypothesis is rejected if the z-score is
+                greater than 2.0.
+            singlescale_threshold_value : float
+                Threshold value for singlescale clean. Default is 1.0.
+            extra_ext_in : str
+                Extra extension for input files.
+            suffix_in : str
+                Suffix for input files.
+            extra_ext_out : str
+                Extra extension for output files.
+            recipe : str
+                The recipe. Default is 'phangsalma'.
+            make_directories : bool
+                Create missing directories.
+            dynamic_sizing : bool
+                Use dynamic sizing.
+            force_square : bool
+                Force the image size to be square.
+            export_dirty : bool
+                If True, export dirty images.
+            export_multiscale : bool
+                If True, export multiscale images.
+            overwrite : bool
+                Overwrite existing files.
             """
 
             if do_all:
@@ -259,7 +328,7 @@ if casa_enabled:
                 logger.info("--------------------------------------------------------")
                 logger.info('Imaging recipe: ' + recipe)
 
-                #<20241113><DZLIU># 
+                #<20241113><DZLIU>#
                 skip = False
                 if not overwrite:
                     do_dirty_image = True
@@ -320,6 +389,7 @@ if casa_enabled:
                         do_revert_to_singlescale=do_revert_to_singlescale,
                         do_export_to_fits=do_export_to_fits,
                         convergence_fracflux=convergence_fracflux,
+                        convergence_noise_z_threshold=convergence_noise_z_threshold,
                         singlescale_threshold_value=singlescale_threshold_value,
                         dynamic_sizing=dynamic_sizing,
                         force_square=force_square,
@@ -810,6 +880,7 @@ if casa_enabled:
                 clean_call=None,
                 imaging_method='tclean',
                 convergence_fracflux=0.01,
+                convergence_noise_z_threshold=None,
                 backup=True,
         ):
             """
@@ -863,6 +934,7 @@ if casa_enabled:
                            stop_at_negative=True,
                            remask_each_loop=False,
                            force_dirty_image=False,
+                           convergence_noise_z_threshold=convergence_noise_z_threshold,
                            )
             # log_ext='multiscale',
             if backup:
@@ -981,6 +1053,7 @@ if casa_enabled:
                 imaging_method='tclean',
                 convergence_fracflux=0.01,
                 threshold_value=1.0,
+                convergence_noise_z_threshold=None,
                 backup=True,
         ):
             """
@@ -1034,6 +1107,7 @@ if casa_enabled:
                            stop_at_negative=False,
                            remask_each_loop=False,
                            force_dirty_image=False,
+                           convergence_noise_z_threshold=convergence_noise_z_threshold,
                            )
             # log_ext='singlescale',
             if backup:
@@ -1099,6 +1173,7 @@ if casa_enabled:
                 do_revert_to_singlescale=True,
                 do_export_to_fits=True,
                 convergence_fracflux=0.01,
+                convergence_noise_z_threshold=None,
                 singlescale_threshold_value=1.0,
                 dynamic_sizing=True,
                 force_square=False,
@@ -1287,6 +1362,7 @@ if casa_enabled:
                 self.task_multiscale_clean(clean_call=clean_call,
                                            imaging_method=imaging_method,
                                            convergence_fracflux=convergence_fracflux,
+                                           convergence_noise_z_threshold=convergence_noise_z_threshold,
                                            )
 
             if do_export_to_fits and export_multiscale:
@@ -1331,6 +1407,7 @@ if casa_enabled:
                 self.task_singlescale_clean(clean_call=clean_call,
                                             imaging_method=imaging_method,
                                             convergence_fracflux=convergence_fracflux,
+                                            convergence_noise_z_threshold=convergence_noise_z_threshold,
                                             threshold_value=singlescale_threshold_value,
                                             )
 
