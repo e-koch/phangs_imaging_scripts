@@ -415,6 +415,61 @@ class TestCheckNoiseConvergence(unittest.TestCase):
                 msg='std_expected mismatch for N={}, gain={}, noise={}'.format(
                     N, gain, noise))
 
+    # ------------------------------------------------------------------
+    # n_pix / extreme-value correction
+    # ------------------------------------------------------------------
+
+    def test_extreme_value_std_formula(self):
+        """
+        With n_pix provided, std_expected = sqrt(N)*gain*noise*sqrt(2*ln(2*n_pix)).
+        """
+        N, gain, noise, n_pix = 100, 0.1, 0.01, 4096
+        summary = _make_summary([(N, 0.0, 0.0)])
+        result = check_noise_convergence(
+            summary, noise=noise, gain=gain, last_n_cycles=1, n_pix=n_pix)
+        expected_std = (math.sqrt(N) * gain * noise
+                        * math.sqrt(2.0 * math.log(2.0 * n_pix)))
+        self.assertAlmostEqual(result['std_expected'], expected_std, places=10)
+
+    def test_extreme_value_noise_only_z_near_zero(self):
+        """S=0 with n_pix → z=0 → converged."""
+        summary = _make_summary([(100, 0.0, 0.0)])
+        result = check_noise_convergence(
+            summary, noise=0.01, gain=0.1,
+            last_n_cycles=1, n_pix=4096, z_threshold=2.0)
+        self.assertAlmostEqual(result['z_score'], 0.0, places=8)
+        self.assertTrue(result['converged'])
+
+    def test_extreme_value_signal_not_converged(self):
+        """flux_sum = 10*std → z=10 → not converged."""
+        N, gain, noise, n_pix = 100, 0.1, 0.01, 4096
+        std = (math.sqrt(N) * gain * noise
+               * math.sqrt(2.0 * math.log(2.0 * n_pix)))
+        flux_sum = 10.0 * std
+        summary = _make_summary([(N, flux_sum, 0.0)])
+        result = check_noise_convergence(
+            summary, noise=noise, gain=gain,
+            last_n_cycles=1, n_pix=n_pix, z_threshold=2.0)
+        self.assertAlmostEqual(result['z_score'], 10.0, places=6)
+        self.assertFalse(result['converged'])
+
+    def test_n_pix_none_uses_naive_fallback(self):
+        """n_pix=None → old formula std = sqrt(N)*gain*noise."""
+        N, gain, noise = 100, 0.1, 0.01
+        summary = _make_summary([(N, 0.0, 0.0)])
+        result = check_noise_convergence(
+            summary, noise=noise, gain=gain, last_n_cycles=1, n_pix=None)
+        self.assertAlmostEqual(
+            result['std_expected'], math.sqrt(N) * gain * noise, places=10)
+
+    def test_n_pix_1_uses_naive_fallback(self):
+        """n_pix=1 (≤ 1 guard) → old formula."""
+        summary = _make_summary([(100, 0.0, 0.0)])
+        result = check_noise_convergence(
+            summary, noise=0.01, gain=0.1, last_n_cycles=1, n_pix=1)
+        self.assertAlmostEqual(
+            result['std_expected'], math.sqrt(100) * 0.1 * 0.01, places=10)
+
 
 # ---------------------------------------------------------------------------
 # CASA wrapper

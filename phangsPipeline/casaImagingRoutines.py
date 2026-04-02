@@ -425,16 +425,18 @@ def execute_clean_call(
 
 
 def check_noise_convergence(tclean_summary, noise, gain, last_n_cycles=3, z_threshold=2.0,
-                            verbose=False):
+                            verbose=False, n_pix=None):
     """
     Statistical convergence test: are the recent CLEAN components consistent
     with noise rather than signal?
 
-    Under H0 (noise only), each component has amplitude drawn from
-    N(0, (gain*noise)^2). The sum S of N_total components has
-    Var(S) = N_total * (gain*noise)^2. The conservative bound assumes all
-    components are at scale 0 (A_eff=1), giving an upper bound on the
-    variance that is valid regardless of the multi-scale breakdown.
+    Under H0 (noise only), CLEAN selects the extremum of the residual image at
+    each minor cycle. For n_pix finite pixels the extremum is drawn from both
+    tails of the Gaussian, so Var(extremum) ≈ 2·ln(2·n_pix)·(gain·noise)^2.
+    The sum S of N_total such extremal draws has
+    Std(S) = sqrt(N_total) · gain · noise · sqrt(2·ln(2·n_pix)).
+    When n_pix is None the older formula Std(S) = sqrt(N_total)·gain·noise
+    is used as a backward-compatible fallback.
 
     Parameters
     ----------
@@ -450,6 +452,10 @@ def check_noise_convergence(tclean_summary, noise, gain, last_n_cycles=3, z_thre
         |z| < z_threshold declares components consistent with noise (converged).
     verbose : bool
         Print summary info.
+    n_pix : int or None
+        Number of finite pixels in the primary-beam image. When provided,
+        enables the extreme-value variance correction. When None, falls back
+        to the simpler random-sampling formula.
     Returns
     -------
     dict with keys: z_score, N_components, flux_sum, std_expected, converged
@@ -487,7 +493,15 @@ def check_noise_convergence(tclean_summary, noise, gain, last_n_cycles=3, z_thre
         return {'z_score': 0.0, 'converged': True,
                 'N_components': 0, 'flux_sum': 0.0, 'std_expected': 0.0}
 
-    std_expected = np.sqrt(total_iter_done) * abs(gain) * float(noise)
+    if n_pix is not None and n_pix > 1:
+        # Extreme-value correction: CLEAN picks the extremum of the noise field.
+        # Both positive max and negative min contribute → factor 2·n_pix.
+        std_expected = (np.sqrt(total_iter_done) * abs(gain) * float(noise)
+                        * np.sqrt(2.0 * np.log(2.0 * n_pix)))
+    else:
+        # Backward-compatible fallback: random-sampling formula.
+        std_expected = np.sqrt(total_iter_done) * abs(gain) * float(noise)
+
     z_score = total_flux_increment / std_expected if std_expected > 0.0 else 0.0
 
     if verbose:
@@ -913,19 +927,32 @@ def clean_loop(
         # variance bound Var(S) = N*(gain*noise)^2.
 
         if convergence_noise_z_threshold is not None:
-            print("convergence_noise_z_threshold", convergence_noise_z_threshold)
+            n_pix = None
+            _imagename = working_call.get_param('imagename')
+            pb_image = (_imagename + '.pb') if _imagename else None
+            if pb_image and os.path.isdir(pb_image):
+                try:
+                    myia = au.createCasaTool(casaStuff.iatool)
+                    myia.open(pb_image)
+                    pb_data = myia.getchunk()
+                    myia.close()
+                    n_pix = int(np.sum(np.isfinite(pb_data)))
+                except Exception:
+                    n_pix = None
             noise_conv = check_noise_convergence(
                 tclean_summary=tclean_summary,
                 noise=current_noise,
                 gain=working_call.get_param('gain') or 0.1,
                 last_n_cycles=convergence_noise_window,
                 z_threshold=convergence_noise_z_threshold,
+                n_pix=n_pix,
             )
             if noise_conv is not None:
                 logger.info(
-                    "Noise convergence: z=%.2f, N=%d, flux_sum=%.4e Jy, "
+                    "Noise convergence: z=%.2f, N=%d, n_pix=%s, flux_sum=%.4e Jy, "
                     "std_expected=%.4e Jy, converged=%s" % (
                         noise_conv['z_score'], noise_conv['N_components'],
+                        str(n_pix),
                         noise_conv['flux_sum'], noise_conv['std_expected'],
                         str(noise_conv['converged'])))
                 if noise_conv['converged']:
