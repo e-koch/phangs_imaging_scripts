@@ -260,7 +260,7 @@ if casa_enabled:
                 logger.info("--------------------------------------------------------")
                 logger.info('Imaging recipe: ' + recipe)
 
-                #<20241113><DZLIU># 
+                #<20241113><DZLIU>#
                 skip = False
                 if not overwrite:
                     do_dirty_image = True

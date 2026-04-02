@@ -424,7 +424,8 @@ def execute_clean_call(
 # endregion
 
 
-def check_noise_convergence(tclean_summary, noise, gain, last_n_cycles=3, z_threshold=2.0):
+def check_noise_convergence(tclean_summary, noise, gain, last_n_cycles=3, z_threshold=2.0,
+                            verbose=False):
     """
     Statistical convergence test: are the recent CLEAN components consistent
     with noise rather than signal?
@@ -447,7 +448,8 @@ def check_noise_convergence(tclean_summary, noise, gain, last_n_cycles=3, z_thre
         Number of trailing major cycles from the tclean call to include.
     z_threshold : float
         |z| < z_threshold declares components consistent with noise (converged).
-
+    verbose : bool
+        Print summary info.
     Returns
     -------
     dict with keys: z_score, N_components, flux_sum, std_expected, converged
@@ -487,6 +489,11 @@ def check_noise_convergence(tclean_summary, noise, gain, last_n_cycles=3, z_thre
 
     std_expected = np.sqrt(total_iter_done) * abs(gain) * float(noise)
     z_score = total_flux_increment / std_expected if std_expected > 0.0 else 0.0
+
+    if verbose:
+        print('z_score', z_score, 'total_iter_done', total_iter_done,
+            'total_flux_increment', total_flux_increment,
+            'std_expected', std_expected)
 
     return {
         'z_score': float(z_score),
@@ -906,6 +913,7 @@ def clean_loop(
         # variance bound Var(S) = N*(gain*noise)^2.
 
         if convergence_noise_z_threshold is not None:
+            print("convergence_noise_z_threshold", convergence_noise_z_threshold)
             noise_conv = check_noise_convergence(
                 tclean_summary=tclean_summary,
                 noise=current_noise,
@@ -913,7 +921,6 @@ def clean_loop(
                 last_n_cycles=convergence_noise_window,
                 z_threshold=convergence_noise_z_threshold,
             )
-            # print(argh)
             if noise_conv is not None:
                 logger.info(
                     "Noise convergence: z=%.2f, N=%d, flux_sum=%.4e Jy, "

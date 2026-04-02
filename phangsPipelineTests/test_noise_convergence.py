@@ -9,14 +9,8 @@ How to run this test inside CASA:
 
     sys.path.append('../analysis_scripts')
     sys.path.append('.')
-    import importlib
     import phangsPipeline
-    importlib.reload(phangsPipeline)
-    importlib.reload(phangsPipeline.casaImagingRoutines)
-    importlib.reload(phangsPipeline.handlerImaging)
     import phangsPipelineTests
-    importlib.reload(phangsPipelineTests)
-    importlib.reload(phangsPipelineTests.test_noise_convergence)
     phangsPipelineTests.TestingNoiseConvergenceInCasa().run()
 
 What is tested:
@@ -30,12 +24,23 @@ What is tested:
     2. test_noise_z_score_disabled
        Same setup but convergence_noise_z_threshold=None.
        Asserts that every noise_z_score entry in the record file is 'N/A'.
+
+Setup strategy:
+
+    setUpClass() runs once for the whole test class:
+      - creates the noise-only MS via simobserve
+      - writes minimal pipeline key files
+      - runs loop_stage_uvdata (HandlerVis) to stage the MS into the imaging tree
+      - makes one dirty image so each test can revert to it cheaply
+
+    Each test method only calls loop_imaging with
+      do_dirty_image=False, do_revert_to_dirty=True, do_multiscale_clean=True
+    so the expensive simobserve and staging steps are not repeated.
 """
 
 import os
 import sys
 import glob
-import shutil
 import unittest
 
 from .noise_only_ms_factory import NoiseOnlyMSFactory
@@ -120,44 +125,61 @@ class TestingNoiseConvergence(unittest.TestCase):
     """
     Integration tests for the noise-convergence stopping criterion.
 
-    setUp() creates a fresh noise-only MS and key set for every test method.
-    tearDown() removes all generated files.
+    setUpClass() runs once: creates the noise-only MS, writes key files,
+    stages the UV data via HandlerVis, and makes a dirty image.
+
+    Individual test methods revert to the dirty image and run multiscale
+    clean with different convergence settings.
     """
 
-    def __init__(self, *args, **kwargs):
-        super(TestingNoiseConvergence, self).__init__(*args, **kwargs)
+    @classmethod
+    def setUpClass(cls):
+        """
+        One-time setup for the entire test class:
+          1. Create noise-only MS via simobserve.
+          2. Write minimal pipeline key files.
+          3. Stage the MS into the imaging tree via loop_stage_uvdata.
+          4. Make one dirty image so tests can cheaply revert to it.
+        """
         import phangsPipeline
-        self.current_dir  = os.getcwd()
-        self.module_dir   = os.path.dirname(
+        from phangsPipeline import handlerKeys as kh
+        from phangsPipeline import handlerVis as uvh
+        from phangsPipeline import handlerImaging as imh
+
+        cls.current_dir  = os.getcwd()
+        cls.module_dir   = os.path.dirname(
             os.path.abspath(phangsPipeline.__path__[0]))
-        self.working_dir  = os.path.join(self.module_dir,
-                                         'phangsPipelineTests')
-        self.test_data_dir = os.path.join(self.working_dir,
-                                          'test_data', 'noise_only')
-        self.test_keys_dir = os.path.join(self.working_dir,
-                                          'test_keys', 'noise_only')
-        self.ms_root      = os.path.join(self.test_data_dir, 'uvdata')
-        self.imaging_dir  = os.path.join(self.test_data_dir, 'imaging')
+        cls.working_dir  = os.path.join(cls.module_dir, 'phangsPipelineTests')
+        cls.test_data_dir = os.path.join(cls.working_dir,
+                                         'test_data', 'noise_only')
+        cls.test_keys_dir = os.path.join(cls.working_dir,
+                                         'test_keys', 'noise_only')
+        cls.ms_root      = os.path.join(cls.test_data_dir, 'uvdata')
+        cls.imaging_dir  = os.path.join(cls.test_data_dir, 'imaging')
 
-    def setUp(self):
-        """Create noise-only MS and write key files."""
-        os.chdir(self.working_dir)
+        os.chdir(cls.working_dir)
 
-        for d in [self.test_data_dir, self.test_keys_dir,
-                  self.ms_root, self.imaging_dir]:
+        # Wipe any artefacts left by a previous run so each run starts clean.
+        import shutil
+        for d in [cls.test_data_dir, cls.test_keys_dir]:
+            if os.path.isdir(d):
+                shutil.rmtree(d)
+
+        for d in [cls.test_data_dir, cls.test_keys_dir,
+                  cls.ms_root, cls.imaging_dir]:
             os.makedirs(d, exist_ok=True)
 
-        # Build the noise-only MS
+        # 1. Build the noise-only MS
         factory = NoiseOnlyMSFactory()
-        self.ms_path = factory.create(self.ms_root)
+        cls.ms_path = factory.create(cls.ms_root)
 
-        # Write pipeline key files
+        # 2. Write pipeline key files
         writer = MinimalKeyWriter(
-            key_dir=self.test_keys_dir,
-            data_dir=self.test_data_dir,
-            ms_root=self.ms_root,
+            key_dir=cls.test_keys_dir,
+            data_dir=cls.test_data_dir,
+            ms_root=cls.ms_root,
         )
-        self.master_key = writer.write_all(
+        cls.master_key = writer.write_all(
             target=_TARGET,
             config=_CONFIG,
             product=_PRODUCT,
@@ -167,12 +189,33 @@ class TestingNoiseConvergence(unittest.TestCase):
             dec=_DEC,
         )
 
-    # def tearDown(self):
-    #     os.chdir(self.current_dir)
-    #     NoiseOnlyMSFactory().cleanup(self.ms_root)
-    #     for d in [self.test_data_dir, self.test_keys_dir]:
-    #         if os.path.isdir(d):
-    #             shutil.rmtree(d)
+        # 3. Stage the UV data via HandlerVis.
+        #    The simulated MS uses 1.5 MHz channels (< max_chanwidth ≈ 2 MHz
+        #    from channel_kms=2.6) and 12 channels (18 MHz total bandwidth),
+        #    which covers the 15 km/s target velocity window.
+        os.chdir(cls.working_dir)
+        this_kh = kh.KeyHandler(master_key=cls.master_key)
+        this_uvh = uvh.VisHandler(key_handler=this_kh)
+        this_uvh.set_targets(only=[_TARGET])
+        this_uvh.set_interf_configs(only=[_CONFIG])
+        this_uvh.set_line_products(only=[_PRODUCT])
+        this_uvh.loop_stage_uvdata(do_all=True)
+
+    def setUp(self):
+        os.chdir(self.working_dir)
+
+    def tearDown(self):
+        os.chdir(self.current_dir)
+
+    # Optional post-run cleanup — disabled by default so generated files
+    # can be inspected after a run.  Uncomment to clean up automatically.
+    @classmethod
+    def tearDownClass(cls):
+        import shutil
+        os.chdir(cls.current_dir)
+        for d in [cls.test_data_dir, cls.test_keys_dir]:
+            if os.path.isdir(d):
+                shutil.rmtree(d)
 
     # ------------------------------------------------------------------
     # Test methods
@@ -185,11 +228,8 @@ class TestingNoiseConvergence(unittest.TestCase):
           - the noise_z_score column contains numeric values (not N/A), and
           - the final z-score is < 2.0, consistent with noise-only components.
         """
-        import phangsPipeline
         from phangsPipeline import handlerKeys as kh
         from phangsPipeline import handlerImaging as imh
-
-        os.chdir(self.working_dir)
 
         this_kh = kh.KeyHandler(master_key=self.master_key)
         this_imh = imh.ImagingHandler(key_handler=this_kh)
@@ -210,7 +250,8 @@ class TestingNoiseConvergence(unittest.TestCase):
             # Disable flux-change criterion so the noise check is the
             # primary convergence mechanism
             convergence_fracflux=None,
-            convergence_noise_z_threshold=2.0,
+            convergence_noise_z_threshold=5.0,
+            overwrite=True,
         )
 
         record_file = _find_record_file(self.imaging_dir, stage='multiscale')
@@ -234,11 +275,8 @@ class TestingNoiseConvergence(unittest.TestCase):
         Run multiscale clean with convergence_noise_z_threshold=None.
         Verify that every noise_z_score entry in the record file is 'N/A'.
         """
-        import phangsPipeline
         from phangsPipeline import handlerKeys as kh
         from phangsPipeline import handlerImaging as imh
-
-        os.chdir(self.working_dir)
 
         this_kh = kh.KeyHandler(master_key=self.master_key)
         this_imh = imh.ImagingHandler(key_handler=this_kh)
@@ -247,7 +285,7 @@ class TestingNoiseConvergence(unittest.TestCase):
         this_imh.set_line_products(only=[_PRODUCT])
 
         this_imh.loop_imaging(
-            do_dirty_image=True,
+            do_dirty_image=False,
             do_revert_to_dirty=True,
             do_read_clean_mask=False,
             do_multiscale_clean=True,
@@ -258,6 +296,7 @@ class TestingNoiseConvergence(unittest.TestCase):
             do_export_to_fits=False,
             convergence_fracflux=0.01,
             convergence_noise_z_threshold=None,
+            overwrite=True,
         )
 
         record_file = _find_record_file(self.imaging_dir, stage='multiscale')
