@@ -388,9 +388,8 @@ def execute_clean_call(
                 unused_kwargs.append(k)
         if imaging_method == 'sdintimaging':
             # Put in the convergence_fracflux criteria, and make sure we don't throw a warning
-            # active_kwargs['convergence_fracflux'] = convergence_fracflux
-            # missing_kwargs.remove('convergence_fracflux')
-            pass
+            active_kwargs['convergence_fracflux'] = convergence_fracflux
+            missing_kwargs.remove('convergence_fracflux')
         if len(unused_kwargs) > 0:
             logger.warning('Unused key arguments for ' + imaging_method + ': ' + str(unused_kwargs))
         if len(missing_kwargs) > 0:
@@ -407,12 +406,10 @@ def execute_clean_call(
         if active_kwargs['pblimit'] > active_kwargs['pbmask']:
             active_kwargs['pbmask'] = active_kwargs['pblimit']
 
-    # TODO: uncomment below when we switch to casatask version of sdintimaging.
-    # active_kwargs['fullsummary'] = True
+    active_kwargs['fullsummary'] = True
 
     if imaging_method == 'tclean':
         # os.mkdir(clean_call.get_param('imagename')+'.image'+'.touch') #<TODO><DEBUG><DL>#
-        active_kwargs['fullsummary'] = True
         tclean_result = casaStuff.tclean(**active_kwargs)
         # os.rmdir(clean_call.get_param('imagename')+'.image'+'.touch') #<TODO><DEBUG><DL>#
     elif imaging_method == 'sdintimaging':
