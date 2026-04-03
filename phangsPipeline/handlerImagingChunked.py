@@ -1474,7 +1474,8 @@ if casa_enabled:
             return ()
 
         @CleanCallFunctionDecorator
-        def task_complete_gather_into_cubes(self, root_name='all', remove_chunks=False):
+        def task_complete_gather_into_cubes(self, root_name='all',
+                                            remove_chunks=False, overwrite=False):
             '''
             Intended to create a final set of cubes.
             '''
@@ -1491,7 +1492,8 @@ if casa_enabled:
             for root in root_names:
 
                 self.task_gather_into_cube(root_name=root,
-                                           remove_chunks=remove_chunks)
+                                           remove_chunks=remove_chunks,
+                                           overwrite=overwrite)
 
         @CleanCallFunctionDecorator
         def task_export_to_fits(
