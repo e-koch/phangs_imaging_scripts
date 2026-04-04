@@ -900,6 +900,10 @@ def clean_loop(
         flux_per_iter = delta_flux / niter
         frac_delta_flux = delta_flux / previous_flux
 
+        # If we don't have any model flux after iter 1, then catch that here
+        if np.isnan(frac_delta_flux) and loop > 0:
+            frac_delta_flux = 0
+
         # Check whether the model flux convergence criteria is met
 
         if convergence_fracflux is not None:
