@@ -334,6 +334,7 @@ def sdintimaging(
         minpsffraction,
         maxpsffraction,
         interactive,
+        fullsummary,
         # (new) Mask parameters
         usemask,
         mask,
@@ -669,8 +670,10 @@ def sdintimaging(
                 deconvolvertool.updateMask()
 
                 # Get summary from iterbot
-                if type(interactive) != bool:
-                    retrec = deconvolvertool.getSummary()
+                retrec = deconvolvertool.getSummary(fullsummary);
+                retrec['nmajordone'] = imager.majorCnt
+                if calcres == True:
+                    retrec['nmajordone'] = retrec['nmajordone'] + 1  ## To be consistent with tclean. Remove, when we can change the meaning of nmajordone to exclude the initial major cycles.
 
                 # If we have a convergence_fracflux set, check here and break out if the flux change is below threshold
                 if convergence_fracflux is not None:
