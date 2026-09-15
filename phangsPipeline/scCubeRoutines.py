@@ -450,10 +450,11 @@ def convolve_to_round_beam(
     # VaryingResolutionSpectralCube or not
     if isinstance(cube, VaryingResolutionSpectralCube):
         beam = cube.beams.major.max()
+        beam = Beam(major=beam, minor=beam, pa=0 * u.deg)
     else:
-        beam = cube.beam.major
+        beam = cube.beam
 
-    bmaj = beam.to(u.arcsec)
+    bmaj = beam.major.to(u.arcsec)
 
     # Get pixel scale in arcsec. Assume square pixels
     pixel_scales = proj_plane_pixel_scales(cube.wcs.celestial) * u.deg
