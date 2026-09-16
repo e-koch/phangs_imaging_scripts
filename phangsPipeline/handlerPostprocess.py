@@ -2478,11 +2478,14 @@ if casa_enabled:
                     # have single dish, enforce the same
                     # astrometric grid).
 
+                    # We copy the weights, but only if we're feathering before mosaicking.
+                    copy_weights = do_feather and feather_before_mosaic
+
                     self.recipe_mosaic_one_target(
                         target=this_target,
                         product=this_product,
                         config=this_config,
-                        copy_weights=False,
+                        copy_weights=copy_weights,
                         check_files=True,
                         imaging_method=imaging_method,
                         postprocessing_method=postprocessing_method,
@@ -2511,7 +2514,7 @@ if casa_enabled:
                             product=this_product,
                             config=this_config,
                             check_files=True,
-                            copy_weights=True,
+                            copy_weights=False,
                             postprocessing_method=postprocessing_method,
                             extra_ext_in="_apod",
                             extra_ext_out="",
@@ -2523,7 +2526,7 @@ if casa_enabled:
                             product=this_product,
                             config=this_config,
                             check_files=True,
-                            copy_weights=True,
+                            copy_weights=False,
                             postprocessing_method=postprocessing_method,
                             extra_ext_in="",
                             extra_ext_out="",
